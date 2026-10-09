@@ -72,6 +72,15 @@ def _rate_limited(ip: str, limit: int = 10, window: float = 60.0) -> bool:
 
 
 # ------------------------------------------------------------------ API
+@app.get("/api/refresh-app", include_in_schema=False)
+async def refresh_app():
+    """Bootstrap outside old service workers' navigation fallback."""
+    target = settings.frontend_dist / "index.html"
+    if not target.is_file():
+        raise HTTPException(503, "Build the frontend before opening the app.")
+    return FileResponse(target, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/health")
 async def health():
     return {"ok": True, "demo": settings.demo_mode, "online": settings.online_checks,

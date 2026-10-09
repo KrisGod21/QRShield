@@ -12,6 +12,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/refresh-app", "destination": "/index.html" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/((?!api/|assets/|.*\\.).*)", "destination": "/index.html" }
   ],
