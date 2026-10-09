@@ -1,0 +1,14 @@
+.runtime
+.claude
+backend/.venv
+backend/data
+backend/tests
+backend/.pytest_cache
+frontend/node_modules
+frontend/tests
+docs/ppt
+docs/codeastra_template.pdf
+Nrok- Cybersecurity Landing Page UI_UX Design __ Behance.html
+*.mp4
+**/__pycache__
+.env

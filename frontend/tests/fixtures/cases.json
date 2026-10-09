@@ -1,0 +1,116 @@
+[
+  {
+    "id": "S1",
+    "payload": "https://onlinesbi.sbi.bank.in/",
+    "intent": "check",
+    "expected": "SAFE"
+  },
+  {
+    "id": "S2",
+    "payload": "upi://pay?pa=qrshield.demo.kirana@ybl&pn=Ramesh%20Kirana%20Store",
+    "intent": "pay_shop",
+    "expected": "SAFE"
+  },
+  {
+    "id": "S3",
+    "payload": "WIFI:S:Sharma_Home;T:WPA;P:chai1234;;",
+    "intent": "check",
+    "expected": "SAFE"
+  },
+  {
+    "id": "C1",
+    "payload": "WIFI:S:Cafe_Guest;T:nopass;;",
+    "intent": "check",
+    "expected": "CAUTION"
+  },
+  {
+    "id": "D1",
+    "payload": "upi://pay?pa=refund.desk2291@ybl&pn=Amazon%20Refund%20Dept&am=4999.00&cu=INR&tn=Scan%20to%20receive%20your%20refund",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D2",
+    "payload": "upi://pay?pa=sbi.kyc.update@okaxisbank&pn=SBI%20KYC%20Helpdesk&am=10&tn=KYC%20verification%20fee%20to%20unblock%20account",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D3",
+    "payload": "upi://mandate?pa=subs.collect@ybl&pn=Cashback%20Activation&am=9999&amrule=MAX&recur=ASPRESENTED&validitystart=09102026&validityend=09102036&rev=N&purpose=14&tn=Activate%20cashback",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D4",
+    "payload": "upi://pay?pa=kbc.lottery.dept@axl&pn=KBC%20Lottery%20Winner&am=12500&tn=GST%20charge%20to%20release%20prize%20Rs%2025%20lakh",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D5",
+    "payload": "https://onlinesbl.test/kyc-update/login",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D6",
+    "payload": "https://onlinesbі.test/login",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D7",
+    "payload": "http://qrs.test/x7Kp",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D8",
+    "payload": "https://echallan-parivahan.test/pay/mParivahan.apk",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D9",
+    "payload": "WIFI:S:RailWire_Free;T:nopass;;",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D10",
+    "payload": "tel:*401*9876543210%23",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "D11",
+    "payload": "upi://pay?pa=qrshield.demo.kirana@ybl&pn=Ramesh%20Kirana%20Store",
+    "intent": "receive",
+    "expected": "DANGER"
+  },
+  {
+    "id": "M1",
+    "payload": "upi://mandate?pa=subscription@ybl&pn=Music%20Subscription&am=99&recur=MONTHLY&rev=Y",
+    "intent": "check",
+    "expected": "CAUTION"
+  },
+  {
+    "id": "U1",
+    "payload": "https://",
+    "intent": "check",
+    "expected": "CAUTION"
+  },
+  {
+    "id": "X1",
+    "payload": "javascript:alert(1)",
+    "intent": "check",
+    "expected": "DANGER"
+  },
+  {
+    "id": "S4",
+    "payload": "upi://pay?pa=shop@okaxis&pn=Corner%20Store&mc=5411&am=250&cu=INR",
+    "intent": "pay_shop",
+    "expected": "SAFE"
+  }
+]

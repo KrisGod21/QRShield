@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><title>QR Shield image validation</title><style>body{background:#10130e;color:#e1dbc9;font:14px/1.6 system-ui;padding:30px}button{padding:12px 20px;background:#efd09a;border:0;border-radius:8px;cursor:pointer}pre{white-space:pre-wrap}.pass{color:#b3e6be}.fail{color:#ffb4aa}</style></head><body><h1>QR Shield image validation</h1><p>Exercises the actual scanner module and live analysis API using generated QR images. Development-only page; not part of the production build.</p><button id="run">Run QR validation</button><p id="status">Ready</p><pre id="results"></pre><script type="module">
+import { decodeFile } from '../src/scanner.ts';
+import { analyze } from '../src/api.ts';
+const button = document.querySelector('#run'), results = document.querySelector('#results'), status = document.querySelector('#status');
+button.onclick = async () => {
+  button.disabled = true; results.textContent = ''; status.textContent = 'Running…';
+  let passed = 0, failed = 0;
+  try {
+    const cases = await (await fetch('./fixtures/cases.json')).json();
+    for (const entry of cases) {
+      try {
+        const blob = await (await fetch(`./fixtures/${entry.id}.png`)).blob();
+        const decoded = await decodeFile(new File([blob], `${entry.id}.png`, { type: 'image/png' }));
+        if (decoded !== entry.payload) throw new Error('Decoded payload differs');
+        const result = await analyze(decoded, entry.intent, 'image');
+        if (result.verdict !== entry.expected) throw new Error(`Expected ${entry.expected}, got ${result.verdict}`);
+        passed++; results.textContent += `PASS ${entry.id}: decoded + ${result.verdict} (${result.score}/100)\n`;
+      } catch (error) { failed++; results.textContent += `FAIL ${entry.id}: ${error.message}\n`; }
+    }
+    status.textContent = `${passed} passed, ${failed} failed`; status.className = failed ? 'fail' : 'pass';
+  } catch (error) { status.textContent = error.message; status.className = 'fail'; }
+  button.disabled = false;
+};
+</script></body></html>
