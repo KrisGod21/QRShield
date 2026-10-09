@@ -163,6 +163,7 @@ async def analyze(payload: str, intent: str, source: str, db: DB, settings: Sett
             "variant": s.variant, "text": i18n.render(s.code, s.params, s.variant),
         } for s in ordered],
         "checks": [{"name": c.name, "status": c.status, "ms": c.ms} for c in a.checks],
+        "technical": a.technical,
         "reports": {"count": reports},
         "payload_hash": h,
         "intent": intent,

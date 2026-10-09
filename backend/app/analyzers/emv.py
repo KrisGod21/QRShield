@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from ..models import Analysis
 from .upi import analyze_upi_params
+from ..technical import add as evidence, text
 
 
 def parse_tlv(data: str) -> dict[str, str] | None:
@@ -19,7 +20,7 @@ def parse_tlv(data: str) -> dict[str, str] | None:
         if i + 4 > len(data):
             return None
         tag, length = data[i:i + 2], data[i + 2:i + 4]
-        if not (tag.isdigit() and length.isdigit()):
+        if not (tag.isdigit() and length.isdigit()) or tag in out:
             return None
         n = int(length)
         value = data[i + 4:i + 4 + n]
@@ -42,23 +43,24 @@ def crc16_ccitt(data: bytes) -> str:
 
 def crc_ok(payload: str) -> bool:
     idx = payload.rfind("6304")
-    if idx < 0 or len(payload) < idx + 8:
+    if idx < 0 or len(payload) != idx + 8 or parse_tlv(payload) is None:
         return False
     expected = payload[idx + 4: idx + 8].upper()
     return crc16_ccitt(payload[: idx + 4].encode("utf-8")) == expected
 
 
 def extract_vpa(tlv: dict[str, str]) -> str | None:
+    candidates: set[str] = set()
     for tag in range(26, 52):
         tmpl = tlv.get(f"{tag:02d}")
         if not tmpl:
             continue
         sub = parse_tlv(tmpl) or {}
         gui = sub.get("00", "").upper()
-        for v in sub.values():
-            if "@" in v and (gui in ("A000000524", "UPI") or "@" in v):
-                return v
-    return None
+        v = sub.get("01", "")
+        if gui in ("A000000524", "UPI") and "@" in v:
+            candidates.add(v)
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
 
 def analyze_emv(payload: str, intent: str, a: Analysis) -> list[str]:
@@ -69,6 +71,10 @@ def analyze_emv(payload: str, intent: str, a: Analysis) -> list[str]:
     a.summary.update({"emv_name": name, "emv_city": tlv.get("60"), "emv_mcc": tlv.get("52")})
     if not crc_ok(data):
         a.add("EMV_CRC_INVALID", 45)
+    evidence(a, "crc", "pass" if crc_ok(data) else "fail", "CRC16/CCITT-FALSE + unique TLV tags", text(
+        "Validates structure and checksum, including an end-of-payload CRC. CRC detects corruption, not merchant authenticity.",
+        "प्रारूप और अंत के checksum की जांच। CRC खराब डेटा पहचानता है, व्यापारी की असलियत नहीं।",
+        "स्वरूप आणि शेवटचा checksum तपासला. CRC खराब डेटा ओळखतो, व्यापाऱ्याची सत्यता नाही."), name)
     vpa = extract_vpa(tlv)
     if not vpa:
         a.add("EMV_NO_UPI", 0)

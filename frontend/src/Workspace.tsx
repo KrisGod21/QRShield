@@ -14,6 +14,7 @@ import { CameraScanner, decodeFile } from "./scanner";
 import { CHECK_NAMES, t } from "./i18n";
 import { c } from "./content";
 import { Icon, QrMark } from "./Icon";
+import { TechnicalPanel } from "./TechnicalPanel";
 
 type Tab = "scan" | "history" | "shop";
 type Source = "camera" | "image" | "text";
@@ -98,14 +99,12 @@ export default function Workspace({
     setError("");
     setResult(null);
     setLoading(true);
-    document
-      .getElementById("scan-desk")
-      ?.scrollIntoView({
-        block: "start",
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
-      });
+    document.getElementById("scan-desk")?.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
     navigator.vibrate?.(40);
     try {
       const r = await analyze(text, scanIntent, source);
@@ -661,7 +660,7 @@ function ResultView({
         {bad.length === 0 && (
           <li className="sev-good">
             <Icon name="check" size={17} />
-            <p>{t(lang, "noFlags")}</p>
+            <p>{isUpi ? t(lang, "noFlags") : c(lang, "noLinkFlags")}</p>
           </li>
         )}
         {reasons.map((x, i) => (
@@ -692,6 +691,41 @@ function ResultView({
             </span>
           ))}
         </div>
+      )}
+
+      <TechnicalPanel lang={lang} findings={r.technical} />
+
+      {Array.isArray(s.hops) && s.hops.length > 0 && (
+        <details className="redirect-trace">
+          <summary>
+            {lang === "en"
+              ? "Full redirect trace"
+              : lang === "hi"
+                ? "पूरी रीडायरेक्ट श्रृंखला"
+                : "संपूर्ण रीडायरेक्ट साखळी"}
+          </summary>
+          <ol>
+            {s.hops.map(
+              (
+                hop: {
+                  url: string;
+                  status: number | null;
+                  ip?: string;
+                  error?: string;
+                },
+                i: number,
+              ) => (
+                <li key={i}>
+                  <span>
+                    {hop.status || hop.error || "?"}
+                    {hop.ip ? ` · ${hop.ip}` : ""}
+                  </span>
+                  <code>{hop.url}</code>
+                </li>
+              ),
+            )}
+          </ol>
+        </details>
       )}
 
       {confirming ? (
@@ -865,14 +899,28 @@ function ShopView({ lang }: { lang: Lang }) {
 
   if (res)
     return (
-      <div className={`shopres ${res.match ? "ok" : "bad"}`} role="status">
+      <div
+        className={`shopres ${res.verdict === "CAUTION" ? "review" : res.verdict === "DANGER" || !res.match ? "bad" : "ok"}`}
+      >
         <div className="big">
-          <Icon name={res.match ? "check" : "alert"} size={52} />
+          <Icon
+            name={
+              res.verdict === "SAFE" || (!res.verdict && res.match)
+                ? "check"
+                : "alert"
+            }
+            size={52}
+          />
         </div>
         <span className="small-label">
           {c(lang, res.match ? "shopMatch" : "shopMismatch")}
         </span>
         <h2>{res.text[lang]}</h2>
+        {res.verdict && (
+          <span className={`merchant-verdict v-${res.verdict}`}>
+            {t(lang, res.verdict)}
+          </span>
+        )}
         {res.name_text && <p>{res.name_text[lang]}</p>}
         {res.found && (
           <code>
@@ -890,6 +938,25 @@ function ShopView({ lang }: { lang: Lang }) {
             <code>{res.found?.vpa || "—"}</code>
           </div>
         </div>
+        {res.analysis && res.analysis.signals.some((s) => s.weight > 0) && (
+          <ul className="reasons merchant-reasons">
+            {res.analysis.signals
+              .filter((s) => s.weight > 0)
+              .map((signal, i) => (
+                <li key={i} className={`sev-${signal.severity}`}>
+                  <Icon name="alert" size={17} />
+                  <p>{signal.text[lang]}</p>
+                </li>
+              ))}
+          </ul>
+        )}
+        <TechnicalPanel
+          lang={lang}
+          findings={[
+            ...(res.technical || []),
+            ...(res.analysis?.technical || []),
+          ]}
+        />
         <button className="btn primary" onClick={() => setRes(null)}>
           {t(lang, "scanAgain")}
         </button>

@@ -49,6 +49,7 @@ class Analysis:
     summary: dict[str, Any] = field(default_factory=dict)
     signals: list[Signal] = field(default_factory=list)
     checks: list[Check] = field(default_factory=list)
+    technical: list[dict[str, Any]] = field(default_factory=list)
 
     def add(self, code: str, weight: int, variant: str | None = None,
             force: Verdict | None = None, **params: Any) -> Signal:
@@ -82,3 +83,5 @@ class ShopVerifyRequest(BaseModel):
     shop_code: str | None = Field(None, max_length=12)
     expected_vpa: str | None = Field(None, max_length=255)
     expected_name: str | None = Field(None, max_length=255)
+    expected_mcc: str | None = Field(None, max_length=4)
+    expected_currency: str | None = Field(None, max_length=3)

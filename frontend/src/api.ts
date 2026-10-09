@@ -24,6 +24,16 @@ export interface AnalyzeResult {
   payload_hash: string;
   elapsed_ms: number;
   demo: boolean;
+  technical?: TechnicalFinding[];
+}
+
+export interface TechnicalFinding {
+  id: string;
+  label: L10n;
+  status: "pass" | "warn" | "fail" | "info" | "unavailable" | "demo";
+  value: string;
+  detail: L10n;
+  scope: string;
 }
 
 async function post<T>(
@@ -64,6 +74,8 @@ export interface ShopInfo {
   vpa: string;
   pn: string;
   shop_name: string;
+  mcc?: string;
+  currency?: string;
 }
 export const shopRegister = (payload: string, shop_name: string) =>
   post<ShopInfo>("/api/shop/register", { payload, shop_name });
@@ -75,10 +87,15 @@ export interface VerifyResult {
   changes: string[];
   text: L10n;
   name_text?: L10n | null;
+  verdict?: Verdict;
+  technical?: TechnicalFinding[];
+  analysis?: AnalyzeResult;
 }
 export const shopVerify = (payload: string, shop: ShopInfo) =>
   post<VerifyResult>("/api/shop/verify", {
     payload,
     expected_vpa: shop.vpa,
     expected_name: shop.pn,
+    expected_mcc: shop.mcc ?? undefined,
+    expected_currency: shop.currency || undefined,
   });

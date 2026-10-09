@@ -7,6 +7,7 @@ import logging
 import re
 import secrets
 import time
+import unicodedata
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +24,8 @@ from .db import DB, PostgresDB
 from .engine import analyze
 from .models import AnalyzeRequest, ReportRequest, ShopRegisterRequest, ShopVerifyRequest
 from .util import payload_hash
+from .models import Analysis
+from .technical import add as evidence, text as audit_text
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("qrshield")
@@ -120,7 +123,16 @@ def _upi_identity(payload: str) -> tuple[str, str] | None:
 
 
 def _norm_name(s: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", s.lower())
+    return "".join(ch for ch in unicodedata.normalize("NFKC", s).casefold()
+                   if unicodedata.category(ch)[0] in "LNM")
+
+
+def _identity_metadata(payload: str) -> dict[str, str]:
+    if payload.strip().lower().startswith("upi:"):
+        _, params, _ = split_upi(payload)
+        return {"mcc": params.get("mc", ""), "currency": params.get("cu", "INR").upper() or "INR"}
+    tlv = parse_tlv(payload.strip()) or {}
+    return {"mcc": tlv.get("52", ""), "currency": "INR" if tlv.get("53", "356") == "356" else tlv.get("53", "")}
 
 
 @app.post("/api/shop/register")
@@ -129,11 +141,12 @@ async def shop_register(req: ShopRegisterRequest):
     if not ident:
         raise HTTPException(400, "Not a UPI payment QR")
     vpa, pn = ident
+    metadata = _identity_metadata(req.payload)
     if settings.serverless and not db.persistent:
-        return {"shop_code": "", "vpa": vpa, "pn": pn, "shop_name": req.shop_name.strip() or pn}
+        return {"shop_code": "", "vpa": vpa, "pn": pn, "shop_name": req.shop_name.strip() or pn, **metadata}
     code = "".join(secrets.choice("ABCDEFGHJKMNPQRSTUVWXYZ23456789") for _ in range(6))
     db.shop_put(code, req.shop_name.strip() or pn, vpa, pn)
-    return {"shop_code": code, "vpa": vpa, "pn": pn, "shop_name": req.shop_name.strip() or pn}
+    return {"shop_code": code, "vpa": vpa, "pn": pn, "shop_name": req.shop_name.strip() or pn, **metadata}
 
 
 @app.post("/api/shop/verify")
@@ -147,23 +160,51 @@ async def shop_verify(req: ShopVerifyRequest):
         exp_vpa, exp_pn = req.expected_vpa, req.expected_name or ""
     else:
         raise HTTPException(400, "shop_code or expected_vpa required")
+    if vpa_problems(exp_vpa):
+        raise HTTPException(400, "Invalid saved UPI address")
+
+    analysis = await analyze(req.payload, "pay_shop", "text", db, settings)
 
     ident = _upi_identity(req.payload)
     if not ident:
         return {"match": False, "expected": {"vpa": exp_vpa, "pn": exp_pn}, "found": None,
-                "changes": ["not_upi"], "text": i18n.render("SHOP_NOT_UPI")}
+                "changes": ["not_upi"], "text": i18n.render("SHOP_NOT_UPI"), "verdict": "DANGER",
+                "technical": [], "analysis": analysis}
     vpa, pn = ident
+    metadata = _identity_metadata(req.payload)
     changes = []
     if vpa.lower() != exp_vpa.lower():
         changes.append("vpa")
-    if exp_pn and pn and _norm_name(pn) != _norm_name(exp_pn):
+    if exp_pn and _norm_name(pn) != _norm_name(exp_pn):
         changes.append("name")
+    if req.expected_mcc is not None and req.expected_mcc != metadata["mcc"]:
+        changes.append("mcc")
+    if req.expected_currency and req.expected_currency.upper() != metadata["currency"]:
+        changes.append("currency")
     match = "vpa" not in changes
     text = i18n.render("SHOP_MATCH", {"vpa": vpa}) if match else \
         i18n.render("SHOP_MISMATCH", {"expected": exp_vpa, "found": vpa})
     extra = i18n.render("SHOP_NAME_CHANGED", {"expected": exp_pn, "found": pn}) if "name" in changes else None
-    return {"match": match, "expected": {"vpa": exp_vpa, "pn": exp_pn}, "found": {"vpa": vpa, "pn": pn},
-            "changes": changes, "text": text, "name_text": extra}
+    baseline = Analysis(kind="merchant")
+    detail = audit_text(
+        "Compared with the QR saved by you. A matching baseline does not verify bank ownership; amounts and transaction references may legitimately change.",
+        "आपके सहेजे QR से तुलना। मिलान बैंक स्वामित्व साबित नहीं करता; रकम और लेनदेन संदर्भ बदल सकते हैं।",
+        "तुमच्या जतन केलेल्या QR शी तुलना. जुळल्याने बँक मालकी सिद्ध होत नाही; रक्कम आणि व्यवहार संदर्भ बदलू शकतात.")
+    for code, before, after, changed in (
+        ("baseline_vpa", exp_vpa, vpa, "vpa" in changes),
+        ("baseline_name", exp_pn, pn, "name" in changes),
+        ("baseline_mcc", req.expected_mcc, metadata["mcc"], "mcc" in changes),
+        ("baseline_currency", req.expected_currency or "", metadata["currency"], "currency" in changes),
+    ):
+        known = before is not None if code == "baseline_mcc" else bool(before)
+        evidence(baseline, code, "fail" if changed and code == "baseline_vpa" else "warn" if changed else "pass" if known else "unavailable",
+                 f"{before or ('Not supplied' if known else 'No saved value')} → {after or 'Missing'}", detail)
+    rank = {"SAFE": 0, "CAUTION": 1, "DANGER": 2}
+    baseline_verdict = "DANGER" if not match else "CAUTION" if changes else "SAFE"
+    verdict = max((baseline_verdict, analysis["verdict"]), key=rank.get)
+    return {"match": match, "expected": {"vpa": exp_vpa, "pn": exp_pn, "mcc": req.expected_mcc, "currency": req.expected_currency},
+            "found": {"vpa": vpa, "pn": pn, **metadata}, "changes": changes, "text": text,
+            "name_text": extra, "verdict": verdict, "technical": baseline.technical, "analysis": analysis}
 
 
 # ------------------------------------------------------------------ demo sheet + PWA

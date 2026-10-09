@@ -45,9 +45,9 @@ Bulk threat feeds work on the local long-running server. On Vercel, configure ke
 Local checks performed during implementation:
 
 - Production TypeScript/Vite/PWA build passed.
-- 154 backend tests passed, including new malformed-URL, uncertainty, legitimate-mandate, signature, report-count and trusted-domain-redirect cases.
+- 183 backend tests passed, including query ambiguity, embedded destinations, HTTPS downgrades, merchant metadata, signature limitations and invisible display controls.
 - The existing live demo verifier passed all 15 QR scans and both shop sticker checks.
-- Actual browser decoding plus API analysis passed on 19 generated QR PNGs at several sizes.
+- Actual browser decoding plus API analysis passed on 25 generated QR PNGs at several sizes.
 - Desktop, tablet and narrow phone layouts were checked with real iframe viewport sizes; the initial phone scan-panel overflow was fixed.
 - `demo/verify_serverless.py` passed with demo mode off, no credentials and no filesystem persistence.
 - `vercel.json` validated against the fetched official configuration schema using a validator supporting its newer schema keywords.

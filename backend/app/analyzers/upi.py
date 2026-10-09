@@ -25,6 +25,7 @@ from ..data.upi_handles import CONSUMER_HANDLES, KNOWN_HANDLES, OFFICIAL_VPAS, h
 from ..homoglyph import skeleton
 from ..models import Analysis
 from ..util import MOBILE_RE, PHONE_IN_TEXT_RE, URL_IN_TEXT_RE, format_inr, truncate
+from ..technical import add as evidence, text
 
 LOCAL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 HANDLE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
@@ -201,6 +202,15 @@ def analyze_upi_params(action: str, params: dict[str, str], dups: list[str], int
         a.add("UPI_DUPLICATE_PARAM", 50, param=k)
     if cu and cu.upper() != "INR":
         a.add("UPI_BAD_CURRENCY", 40, currency=cu)
+    if not pn:
+        a.add("UPI_MISSING_NAME", 12, force="CAUTION")
+    if any(ch in "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069" for ch in pn + tn):
+        a.add("UPI_DISPLAY_CONTROL", 35, force="CAUTION")
+    if mc and not re.fullmatch(r"\d{4}", mc):
+        a.add("UPI_BAD_MCC", 25, force="CAUTION", mcc=mc)
+    if mam and mam.lower() != "null" and (not AMOUNT_RE.fullmatch(mam) or Decimal(mam) <= 0
+            or (amount is not None and Decimal(mam) > amount)):
+        a.add("UPI_BAD_MIN_AMOUNT", 25, force="CAUTION")
     sign = params.get("sign")
     if sign:
         try:
@@ -276,6 +286,44 @@ def analyze_upi_params(action: str, params: dict[str, str], dups: list[str], int
     if ref_url:
         a.add("UPI_REF_URL", 15, url=truncate(ref_url, 50))
         nested.append(ref_url)
+
+    scope = vpa or source_label
+    evidence(a, "vpa", "fail" if vpa_problems(vpa) else "pass", vpa or "Missing pa", text(
+        "Checks local-part, ASCII characters, separators and the single @ boundary. Syntax does not verify that this account exists.",
+        "प्रारूप, ASCII अक्षर और एक @ की जांच। यह खाता मौजूद होने की पुष्टि नहीं है।",
+        "स्वरूप, ASCII अक्षरे आणि एक @ तपासले. खाते अस्तित्वात असल्याची ही खात्री नाही."), scope)
+    evidence(a, "handle", "pass" if tier else "warn", f"@{handle_l} | {tier or 'Unknown to bundled list'}", text(
+        "Matched against the bundled PSP handle list and checked for lookalikes. Recognising a handle does not authenticate its account holder.",
+        "PSP सूची और मिलते-जुलते हैंडल की जांच। हैंडल पहचानने से खाताधारक की पुष्टि नहीं होती।",
+        "PSP सूची आणि समान हँडल तपासले. हँडल ओळखल्याने खातेदाराची खात्री होत नाही."), scope)
+    name_flags = {"UPI_IMPERSONATION", "UPI_BUSINESS_NAME_PERSONAL_VPA", "UPI_BRAND_IN_VPA", "UPI_OFFICIAL_LOOKALIKE", "UPI_DISPLAY_CONTROL"}
+    evidence(a, "name", "warn" if not pn or any(s.code in name_flags for s in a.signals) else "info", pn or "Missing pn", text(
+        "The name is self-declared inside the QR. Name / VPA inconsistencies and authority impersonation rules were inspected.",
+        "नाम QR में खुद लिखा गया है। नाम, VPA और नकली अधिकार पहचान की जांच हुई।",
+        "नाव QR मध्ये स्वतः घोषित आहे. नाव, VPA आणि बनावट अधिकृत ओळख तपासली."), scope)
+    evidence(a, "mcc", "warn" if a.has("UPI_BAD_MCC") or a.has("UPI_RISKY_MCC") else "info", mc or "Not supplied (personal-style QR)", text(
+        "A four-digit MCC describes the declared merchant category. It is not a merchant registration or KYC certificate.",
+        "चार अंकों का MCC घोषित व्यापारी श्रेणी है, पंजीकरण या KYC प्रमाणपत्र नहीं।",
+        "चार अंकी MCC ही घोषित व्यापारी श्रेणी आहे, नोंदणी किंवा KYC प्रमाणपत्र नाही."), scope)
+    constraint_flags = {"UPI_BAD_AMOUNT", "UPI_BAD_MIN_AMOUNT", "UPI_BAD_CURRENCY", "UPI_RECEIVE_INTENT", "UPI_MANDATE_IRREVOCABLE"}
+    evidence(a, "payment", "warn" if any(s.code in constraint_flags for s in a.signals) else "info",
+             f"{action} | {cu or 'INR'} | amount={am_raw or 'payer enters'} | mam={mam or 'absent'}", text(
+        "Checks debit intent, currency, amount precision, minimum amount and recurring-payment constraints.",
+        "पैसे कटने की मंशा, मुद्रा, रकम, न्यूनतम रकम और बार-बार भुगतान की जांच।",
+        "डेबिट हेतू, चलन, रक्कम, किमान रक्कम आणि आवर्ती पेमेंट अटी तपासल्या."), scope)
+    evidence(a, "params", "fail" if dups else "pass", ", ".join(dups) or "No conflicting duplicate fields", text(
+        "Conflicting repeated parameters can hide a different payee or amount across payment applications.",
+        "दोहराए गए अलग मान अलग ऐप में प्राप्तकर्ता या रकम बदल सकते हैं।",
+        "पुनरावृत्तीतील वेगवेगळी मूल्ये ॲपनुसार प्राप्तकर्ता किंवा रक्कम बदलू शकतात."), scope)
+    evidence(a, "signature", "warn" if a.has("UPI_SIGN_MALFORMED") else "unavailable",
+             "Malformed Base64 signature" if a.has("UPI_SIGN_MALFORMED") else "Signature present; cryptographic verification unavailable" if sign else "Unsigned QR", text(
+        "Only signature encoding is inspected. NPCI / issuer public keys and cryptographic signature verification are not integrated. No trust points are awarded.",
+        "केवल encoding की जांच। NPCI / issuer कुंजी और क्रिप्टोग्राफिक पुष्टि उपलब्ध नहीं। भरोसे के अंक नहीं दिए जाते।",
+        "फक्त encoding तपासले. NPCI / issuer की आणि क्रिप्टोग्राफिक पडताळणी उपलब्ध नाही. विश्वासाचे गुण दिले जात नाहीत."), scope)
+    evidence(a, "ownership", "unavailable", "Account existence / bank-verified name / KYC not checked", text(
+        "Confirm the beneficiary in your payment app and with the merchant. This prototype has no bank account-resolution API.",
+        "पेमेंट ऐप और व्यापारी से प्राप्तकर्ता की पुष्टि करें। बैंक खाता पुष्टि API उपलब्ध नहीं है।",
+        "पेमेंट ॲप आणि व्यापाऱ्याकडून प्राप्तकर्त्याची खात्री करा. बँक खाते पडताळणी API उपलब्ध नाही."), scope)
 
     return nested
 

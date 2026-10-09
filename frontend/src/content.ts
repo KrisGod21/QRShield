@@ -24,6 +24,11 @@ const C = {
     "अपने आप कुछ नहीं खुलता। नियंत्रण आपके हाथ में।",
     "आपोआप काही उघडत नाही. नियंत्रण तुमच्या हातात.",
   ],
+  noLinkFlags: [
+    "No configured warning rules matched. Review the destination and available checks before opening.",
+    "कोई चेतावनी नियम नहीं मिला। खोलने से पहले गंतव्य और उपलब्ध जांचें देखें।",
+    "इशाऱ्याचा नियम जुळला नाही. उघडण्यापूर्वी गंतव्य आणि उपलब्ध तपासण्या पहा.",
+  ],
   signalOne: [
     "UNDERSTAND THE ACTION",
     "जानें QR क्या करेगा",
@@ -178,9 +183,9 @@ const C = {
     "तुमचा मूळ QR या डिव्हाइसवर आहे. ही बदलांची तपासणी आहे, खात्याच्या मालकीची नाही.",
   ],
   shopMatch: [
-    "Your sticker matches.",
-    "आपका स्टिकर मेल खाता है।",
-    "तुमचा स्टिकर जुळतो.",
+    "Your payee address matches.",
+    "प्राप्तकर्ता का पता मेल खाता है।",
+    "प्राप्तकर्त्याचा पत्ता जुळतो.",
   ],
   shopMismatch: [
     "Something has changed.",

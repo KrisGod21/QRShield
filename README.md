@@ -4,6 +4,10 @@ CodeAstra 2.0 hackathon prototype. Scan a QR **before** it opens and see, in pla
 
 The UI now has a responsive dark/gold design with an animated QR/shield hero, a scan workspace, illustrative samples, local history and merchant sticker comparison. Motion respects the user's reduced-motion preference. Analysis highlights risk signals; it does not guarantee safety or verify bank ownership.
 
+Scan results include a technical inspection panel with expandable evidence and filters for warnings and unavailable checks. Link inspection shows the registrable domain, lookalike rules, conflicting query parameters, embedded destinations, DNS-pinned public IPs, live TLS verification, HTTP content, redirect traces, RDAP age and threat-service availability. Embedded query targets receive lexical inspection without being fetched; observed HTTPS-to-HTTP redirects and executable response types affect the risk verdict.
+
+Payment inspection shows VPA syntax, recognised PSP handles, self-declared name/MCC, amount and currency constraints, conflicting parameters and signature limitations. Merchant mode compares the saved VPA, name, category and currency, and also runs the payment/link analysis. Changed payees are dangerous; metadata changes need review. Dynamic amounts and transaction references are not treated as sticker tampering. Existing saved baselines continue working; save the original QR again to include category/currency in older baselines. Bank account existence, KYC and cryptographic issuer signatures are unavailable and explicitly labelled.
+
 **Vercel:** Import the repository root using the committed `vercel.json`. Scanning works without API keys; add a server-side PostgreSQL `DATABASE_URL` for durable community reporting. See [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md) for settings, storage behavior and validation.
 
 - Research: [docs/RESEARCH.md](docs/RESEARCH.md)
@@ -75,7 +79,7 @@ Every external service is optional. If a key is missing or a service is down, th
 cd backend && .venv/Scripts/python -m pytest -q
 ```
 
-That runs 154 tests covering the UPI parser, Bharat QR CRC, homoglyphs, typosquats, scoring, the SSRF guard, i18n completeness, the API and safety regressions. Ordinary AutoPay mandates receive caution; malformed or unresolved links never receive a reassuring green result; unverified signatures do not reduce risk; report counts alone cannot establish danger.
+That runs 183 tests covering the UPI parser, Bharat QR CRC, homoglyphs, typosquats, scoring, the SSRF guard, i18n completeness, the API and safety regressions. Technical regressions cover query conflicts, hidden destinations, HTTPS downgrades, response content, merchant metadata changes and display controls. Ordinary AutoPay mandates receive caution; malformed or unresolved links never receive a reassuring green result; unverified signatures do not reduce risk; report counts alone cannot establish danger.
 
 With the server running, this checks every demo QR end to end:
 

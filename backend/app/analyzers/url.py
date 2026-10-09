@@ -17,7 +17,7 @@ import re
 import time
 from dataclasses import dataclass
 from functools import lru_cache
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, parse_qsl, unquote, urlsplit
 
 from rapidfuzz.distance import DamerauLevenshtein
 
@@ -31,6 +31,31 @@ from ..domainutil import HostInfo, host_info, icann_registrable, parse_ip, to_un
 from ..homoglyph import skeleton
 from ..models import Analysis, Check
 from ..util import truncate
+from ..technical import add as evidence, text
+
+DESTINATION_KEYS = {"url", "redirect", "redirect_uri", "redirect_url", "return", "returnurl",
+                    "return_url", "next", "continue", "target", "dest", "destination", "callback"}
+
+
+def query_details(query: str) -> tuple[list[str], list[tuple[str, str]]]:
+    """Decode at most twice; never fetch embedded destinations automatically."""
+    values: dict[str, set[str]] = {}
+    destinations = []
+    for key, value in parse_qsl(query, keep_blank_values=True):
+        key = key.lower()
+        values.setdefault(key, set()).add(value)
+        if key not in DESTINATION_KEYS:
+            continue
+        for _ in range(2):
+            decoded = unquote(value)
+            if decoded == value:
+                break
+            value = decoded
+        if value.startswith("//"):
+            value = "https:" + value
+        if re.match(r"^(https?://|javascript:|data:|file:)", value, re.I):
+            destinations.append((key, value))
+    return [key for key, vals in values.items() if len(vals) > 1], destinations[:2]
 
 # Big shared infrastructure whose names contain brand words (amazonaws, googleapis ...).
 BRAND_SAFE_INFRA = {"amazonaws.com", "cloudfront.net", "googleapis.com", "googleusercontent.com",
@@ -127,6 +152,31 @@ def lexical(url: str, a: Analysis, ctx: Ctx, stage: str = "") -> Lexical:
     path = unquote(p.path or "")
     query = unquote(p.query or "")
     path_l = (path + "?" + query).lower()
+    scope = f"{stage or 'scanned'}: {info.unicode_host}"
+    conflicts, destinations = query_details(p.query)
+    if conflicts:
+        a.add("URL_QUERY_CONFLICT", 25, force="CAUTION", keys=", ".join(conflicts[:4]))
+    evidence(a, "domain", "info", f"{info.host} | {info.registrable}", text(
+        "ASCII host and registrable domain from the public suffix list. Subdomains do not prove brand ownership.",
+        "ASCII होस्ट और असली पंजीकरण डोमेन। सबडोमेन से ब्रांड स्वामित्व साबित नहीं होता।",
+        "ASCII होस्ट आणि नोंदणी डोमेन. सबडोमेन ब्रँड मालकी सिद्ध करत नाही."), scope)
+    evidence(a, "query", "warn" if conflicts else "pass", ", ".join(conflicts) or "No conflicting duplicate keys", text(
+        "Conflicting duplicate values can be read differently by different applications.",
+        "एक ही पैरामीटर के अलग मान अलग ऐप में अलग पढ़े जा सकते हैं।",
+        "एकाच पॅरामीटरची वेगवेगळी मूल्ये वेगवेगळ्या ॲप्समध्ये वेगळी वाचली जाऊ शकतात."), scope)
+    for key, dest in destinations:
+        try:
+            target = urlsplit(dest)
+            cross = target.scheme not in ("http", "https") or (
+                target.hostname and host_info(target.hostname).registrable != info.registrable)
+        except ValueError:
+            cross = True
+        if cross:
+            a.add("URL_EMBEDDED_DESTINATION", 15, key=key, destination=truncate(dest, 100))
+        evidence(a, "embedded", "warn" if cross else "info", f"{key}: {dest}", text(
+            "Destination declared in the query, not an observed redirect. Its address is inspected without requesting it.",
+            "URL में दिया गया गंतव्य, वास्तविक रीडायरेक्ट नहीं। इसे खोले बिना पता जांचा गया।",
+            "URL मधील गंतव्य, प्रत्यक्ष रीडायरेक्ट नाही. ते न उघडता पत्ता तपासला."), scope)
 
     if stage == "":
         a.summary.setdefault("url", url)
@@ -241,8 +291,8 @@ def lexical(url: str, a: Analysis, ctx: Ctx, stage: str = "") -> Lexical:
         target = path.strip("/").split("/")[0] or qs.get("phone", ["?"])[0]
         if CHAT_HOSTS[info.host] == "WhatsApp" and target.isdigit():
             target = "+" + target
-        text = qs.get("text", [""])[0]
-        a.summary["chat"] = {"app": CHAT_HOSTS[info.host], "target": target, "text": text}
+        chat_text = qs.get("text", [""])[0]
+        a.summary["chat"] = {"app": CHAT_HOSTS[info.host], "target": target, "text": chat_text}
         a.add("URL_OPENS_CHAT", 10, app=CHAT_HOSTS[info.host], target=target)
         a.headline_code, a.headline_params = "HEAD_CHAT", {"app": CHAT_HOSTS[info.host], "target": target}
     if info.host == "play.google.com" and path.startswith("/store/apps"):
@@ -253,6 +303,13 @@ def lexical(url: str, a: Analysis, ctx: Ctx, stage: str = "") -> Lexical:
                 a.add("APP_REMOTE_ACCESS", 60, package=pkg)
             else:
                 a.add("URL_APP_INSTALL", 15, package=pkg)
+
+    identity_codes = {"URL_HOMOGLYPH", "URL_TYPOSQUAT", "URL_BRAND_MISUSE", "URL_GOV_IMPERSONATION", "URL_USERINFO"}
+    identity_flags = [s.code for s in a.signals if s.code in identity_codes]
+    evidence(a, "identity", "warn" if identity_flags else "pass", ", ".join(identity_flags) or "No configured impersonation rules matched", text(
+        "Unicode confusables, edit distance, brand tokens and userinfo are inspected against the bundled rules. This is not proof of ownership.",
+        "Unicode समान अक्षर, टाइपो, ब्रांड और userinfo की जांच। यह स्वामित्व का प्रमाण नहीं है।",
+        "Unicode समान अक्षरे, टायपो, ब्रँड आणि userinfo तपासले. हा मालकीचा पुरावा नाही."), scope)
 
     return Lexical(url, info, official, shortener, False)
 
@@ -273,22 +330,34 @@ async def _domain_age(domain: str, ctx: Ctx, a: Analysis) -> None:
         from ..demo_fixtures import DOMAIN_AGE_DAYS
         if domain in DOMAIN_AGE_DAYS:
             _age_signal(domain, DOMAIN_AGE_DAYS[domain], a)
+            _age_evidence(domain, DOMAIN_AGE_DAYS[domain], "demo", a)
             a.checks.append(Check("domain_age", "demo", int((time.monotonic() - t0) * 1000)))
             return
     if not ctx.online:
         a.checks.append(Check("domain_age", "skipped"))
+        _age_evidence(domain, None, "unavailable", a)
         return
     if ctx.remaining() < 0.25:
         a.checks.append(Check("domain_age", "skipped", 0, "budget"))
+        _age_evidence(domain, None, "unavailable", a)
         return
     status, created = await rdap.lookup_created(domain, ctx.db, timeout=min(1.5, ctx.remaining()))
     ms = int((time.monotonic() - t0) * 1000)
+    days = None
     if created:
         days = rdap.age_days(created)
         if days is not None:
             _age_signal(domain, days, a)
+    _age_evidence(domain, days, "warn" if days is not None and days < 90 else "info" if days is not None else "unavailable", a)
     a.checks.append(Check("domain_age", status if status in ("ok", "cached", "timeout", "error") else "skipped",
                           ms, status))
+
+
+def _age_evidence(domain: str, days: int | None, status: str, a: Analysis) -> None:
+    evidence(a, "age", status, f"{days} days" if days is not None else "No registration date available", text(
+        "RDAP registration age is context, not a safety guarantee. Demo values are fixture data; an unavailable lookup is not a clean result.",
+        "RDAP उम्र संदर्भ है, सुरक्षा की गारंटी नहीं। Demo उम्र नमूना है; उपलब्ध न होना सुरक्षित होने का प्रमाण नहीं।",
+        "RDAP वय संदर्भ आहे, सुरक्षिततेची हमी नाही. Demo वय नमुना आहे; अनुपलब्ध तपासणी स्वच्छ निकाल नाही."), domain)
 
 
 def _age_signal(domain: str, days: int, a: Analysis) -> None:
@@ -308,9 +377,25 @@ async def _intel(urls: list[str], ctx: Ctx, a: Analysis) -> None:
         if src:
             a.add("URL_INTEL_HIT", 100, force="DANGER", source=src)
             a.checks.append(Check("threat_feeds", "ok", int((time.monotonic() - t0) * 1000), src))
+            evidence(a, "feeds", "demo" if "demo" in src.lower() else "fail", src, text(
+                "Matched a locally loaded threat entry. Demo entries are labelled separately.",
+                "लोड किए गए खतरे के रिकॉर्ड से मिलान। Demo रिकॉर्ड अलग चिन्हित हैं।",
+                "लोड केलेल्या धोक्याच्या नोंदीशी जुळले. Demo नोंदी वेगळ्या दर्शवल्या आहेत."), urls[-1])
             return
     available = any(feed.get("count", 0) > 0 for feed in intel.feed_status(ctx.db).values())
     a.checks.append(Check("threat_feeds", "ok" if available else "skipped", int((time.monotonic() - t0) * 1000)))
+    sources = intel.feed_status(ctx.db)
+    counts = ", ".join(f"{name}: {feed.get('count', 0)}" for name, feed in sources.items() if feed.get("count", 0))
+    evidence(a, "feeds", "info" if available else "unavailable", counts or "No loaded feed entries", text(
+        "No match in the loaded entries. Feed absence or a miss does not establish safety.",
+        "लोड किए गए रिकॉर्ड में मिलान नहीं। रिकॉर्ड न होना या मिलान न होना सुरक्षा साबित नहीं करता।",
+        "लोड केलेल्या नोंदीत जुळले नाही. नोंदी नसणे किंवा न जुळणे सुरक्षितता सिद्ध करत नाही."), urls[-1])
+    for name, enabled in (("Google Safe Browsing", bool(intel.settings.gsb_api_key)), ("URLhaus API", bool(intel.settings.urlhaus_auth_key))):
+        if not enabled or not ctx.online:
+            evidence(a, "api", "unavailable", name, text(
+                "Not run: API credential or online checks are unavailable.",
+                "जांच नहीं हुई: API कुंजी या ऑनलाइन जांच उपलब्ध नहीं।",
+                "तपासले नाही: API की किंवा ऑनलाइन तपासणी उपलब्ध नाही."), urls[-1])
     if not ctx.online:
         return
     apis = []
@@ -324,14 +409,24 @@ async def _intel(urls: list[str], ctx: Ctx, a: Analysis) -> None:
             src = await asyncio.wait_for(make(), max(0.1, min(1.5, ctx.remaining())))
         except asyncio.TimeoutError:
             a.checks.append(Check(name, "timeout"))
+            _api_evidence(a, name, "unavailable", "Timeout", urls[-1])
             continue
         except Exception:  # noqa: BLE001 - external API problems must not break analysis
             a.checks.append(Check(name, "error"))
+            _api_evidence(a, name, "unavailable", "Service error", urls[-1])
             continue
         a.checks.append(Check(name, "ok", int((time.monotonic() - t1) * 1000)))
+        _api_evidence(a, name, "fail" if src else "info", src or "No threat match returned", urls[-1])
         if src:
             a.add("URL_INTEL_HIT", 100, force="DANGER", source=src)
             return
+
+
+def _api_evidence(a: Analysis, name: str, status: str, value: str, scope: str) -> None:
+    evidence(a, "api", status, f"{name}: {value}", text(
+        "External service result at scan time. A successful lookup with no match is not proof of safety.",
+        "स्कैन के समय बाहरी सेवा का परिणाम। मिलान न होना सुरक्षा का प्रमाण नहीं है।",
+        "स्कॅनच्या वेळी बाह्य सेवेचा निकाल. न जुळणे सुरक्षिततेचा पुरावा नाही."), scope)
 
 
 async def _expand(url: str, lex: Lexical, ctx: Ctx, a: Analysis) -> str | None:
@@ -344,20 +439,34 @@ async def _expand(url: str, lex: Lexical, ctx: Ctx, a: Analysis) -> str | None:
     if not ctx.online and not (virtual and url in virtual):
         a.checks.append(Check("redirects", "skipped"))
         a.add("URL_UNVERIFIED", 25, force="CAUTION")
+        _network_evidence(a, url, None)
         return None
     res = await ssrf.expand(url, timeout=max(0.2, min(2.5, ctx.remaining())), virtual=virtual)
     ms = int((time.monotonic() - t0) * 1000)
     a.checks.append(Check("redirects", res.status if res.status != "blocked" else "error", ms, res.reason))
-    if res.status in ("timeout", "error", "blocked"):
+    if res.status in ("timeout", "error", "blocked") or (res.hops and (res.hops[-1].status or 0) >= 400):
         a.add("URL_UNVERIFIED", 25, force="CAUTION")
-    a.summary["hops"] = [{"url": truncate(h.url, 80), "status": h.status} for h in res.hops]
+    a.summary["hops"] = [{"url": h.url, "status": h.status, "ip": h.ip, "error": h.error} for h in res.hops]
+    _network_evidence(a, url, res)
+    if any(before.url.partition(":")[0].lower() == "https" and after.url.partition(":")[0].lower() == "http"
+           for before, after in zip(res.hops, res.hops[1:])):
+        a.add("URL_HTTPS_DOWNGRADE", 35, force="CAUTION")
     ctype = (res.content_type or "").lower()
     if "android.package-archive" in ctype or ".apk" in (res.content_disposition or "").lower():
         if not a.has("URL_APK_DOWNLOAD"):
             fname = res.final_url.rsplit("/", 1)[-1] or "app.apk"
             a.add("URL_APK_DOWNLOAD", 70, force="DANGER", file=truncate(fname, 40))
+    elif any(t in ctype for t in ("application/x-msdownload", "application/x-dosexec", "application/vnd.microsoft.portable-executable")):
+        if not a.has("URL_EXE_DOWNLOAD"):
+            a.add("URL_EXE_DOWNLOAD", 50, file="Executable response")
     if res.redirects >= 1:
-        first, final = host_info(urlsplit(url).hostname or ""), host_info(urlsplit(res.final_url).hostname or "")
+        try:
+            final_host = urlsplit(res.final_url).hostname or ""
+        except ValueError:
+            a.add("URL_INVALID", 45, force="CAUTION")
+            a.summary["invalid_url"] = True
+            return None
+        first, final = lex.info, host_info(final_host)
         # A shortener normally hops to another domain; only count it when it lands on
         # free hosting or a bare IP.
         cross = first.registrable != final.registrable and (
@@ -369,8 +478,50 @@ async def _expand(url: str, lex: Lexical, ctx: Ctx, a: Analysis) -> str | None:
     return None
 
 
+def _network_evidence(a: Analysis, url: str, res: ssrf.ExpandResult | None) -> None:
+    observed = res is not None and res.status == "ok"
+    demo = res is not None and res.status == "demo"
+    state = "demo" if demo else "pass" if observed else "unavailable"
+    ips = ", ".join(dict.fromkeys(h.ip for h in res.hops if h.ip)) if res else ""
+    blocked = res is not None and res.status == "blocked"
+    dns_state = "warn" if blocked else "demo" if demo else "pass" if observed and ips else "unavailable"
+    evidence(a, "dns", dns_state, ips or ("Fixture only; no DNS query" if demo else res.reason or "No public IP observed" if res else "Online check disabled"), text(
+        "Each requested hop resolves to a public IP and connects to that pinned IP. Private / metadata targets, credentials and unsupported ports are blocked.",
+        "हर अनुरोध सार्वजनिक IP से जुड़ता है। निजी IP, metadata, credentials और अस्वीकृत पोर्ट रोके जाते हैं।",
+        "प्रत्येक विनंती सार्वजनिक IP शी जोडली जाते. खासगी IP, metadata, credentials आणि अमान्य पोर्ट रोखले जातात."), url)
+    final = res.final_url if res else url
+    secure = final.partition(":")[0].lower() == "https"
+    tls = bool(res and res.tls_verified and observed and secure)
+    evidence(a, "transport", "pass" if tls else "demo" if demo else "warn" if not secure else "unavailable",
+             "TLS certificate / hostname validated" if tls else "HTTP (unencrypted)" if not secure else "HTTPS declared; live TLS not verified", text(
+        "HTTPS alone does not prove legitimacy. Live TLS validation is reported only after a successful certificate-verified connection.",
+        "HTTPS से असली वेबसाइट साबित नहीं होती। TLS पुष्टि केवल सफल प्रमाणपत्र जांच के बाद दिखाई जाती है।",
+        "HTTPS मुळे वेबसाइट खरी ठरत नाही. TLS पडताळणी यशस्वी प्रमाणपत्र तपासणीनंतरच दाखवली जाते."), final)
+    chain = " → ".join(f"{h.status or h.error or '?'} {_display_host(h.url)}" for h in res.hops) if res else "Not requested"
+    evidence(a, "redirects", state, chain, text(
+        "At most five redirects. Every hop is revalidated; no JavaScript is executed. Demo chains are simulated.",
+        "अधिकतम पांच रीडायरेक्ट। हर पते की फिर जांच होती है; JavaScript नहीं चलता। Demo श्रृंखला नकली नमूना है।",
+        "जास्तीत जास्त पाच रीडायरेक्ट. प्रत्येक पत्ता पुन्हा तपासला जातो; JavaScript चालत नाही. Demo साखळी नमुना आहे."), url)
+    code = res.hops[-1].status if res and res.hops else None
+    evidence(a, "response", "warn" if code and code >= 400 else "info" if observed else state,
+             f"HTTP {code or '?'} | {(res.content_type or 'Content type unavailable') if res else 'No response'}", text(
+        "Observed response headers, not a full page audit. Forms, scripts and malware binaries are not executed or submitted.",
+        "प्रतिक्रिया headers की जांच, पूरी वेबसाइट की नहीं। Form, script और malware नहीं चलाए जाते।",
+        "प्रतिसाद headers तपासले, संपूर्ण वेबसाइट नाही. Form, script आणि malware चालवले जात नाहीत."), final)
+
+
+def _display_host(url: str) -> str:
+    try:
+        return urlsplit(url).hostname or url
+    except ValueError:
+        return "Malformed redirect destination"
+
+
 async def analyze_url(raw: str, a: Analysis, ctx: Ctx) -> None:
     url = normalize_url(raw)
+    if any(ord(ch) < 32 or ch == "\\" or ord(ch) == 127 for ch in raw.strip()):
+        a.add("URL_PARSER_AMBIGUITY", 35, force="CAUTION")
+        a.summary["invalid_url"] = True
     a.kind = a.kind if a.kind not in ("", "text") else "url"
     lex = lexical(url, a, ctx)
     if lex.info is None:
@@ -378,6 +529,14 @@ async def analyze_url(raw: str, a: Analysis, ctx: Ctx) -> None:
         return
     if a.headline_code == "HEAD_TEXT":
         a.headline_code, a.headline_params = "HEAD_URL", {"host": lex.info.unicode_host}
+
+    for _, destination in query_details(urlsplit(url).query)[1]:
+        sub = Analysis(kind="url")
+        if destination.lower().startswith(("javascript:", "data:", "file:")):
+            sub.add("URL_DANGEROUS_SCHEME", 100, force="DANGER", scheme=destination.split(":", 1)[0])
+        else:
+            lexical(destination, sub, ctx, stage="embedded")
+        merge(a, sub, positive_only=True)
 
     jobs = [_intel([url], ctx, a)]
     if not lex.info.is_ip:
@@ -408,3 +567,4 @@ def merge(dst: Analysis, src: Analysis, positive_only: bool = True) -> None:
         dst.signals.append(s)
         seen.add(key)
     dst.checks.extend(c for c in src.checks if c.name not in {x.name for x in dst.checks})
+    dst.technical.extend(src.technical)

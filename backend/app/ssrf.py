@@ -119,6 +119,7 @@ class ExpandResult:
     content_disposition: str = ""
     status: str = "ok"         # ok | timeout | error | blocked | demo
     reason: str = ""
+    tls_verified: bool = False
 
     @property
     def redirects(self) -> int:
@@ -189,6 +190,7 @@ async def expand(url: str, timeout: float = 2.5, virtual: VirtualWeb | None = No
                 return res
 
             hop.status = resp.status_code
+            res.tls_verified = scheme == "https" and transport is None
             loc = resp.headers.get("location")
             if resp.is_redirect and loc:
                 current = urljoin(current, loc)

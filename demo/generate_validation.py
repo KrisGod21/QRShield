@@ -12,6 +12,12 @@ cases.extend([
     dict(id='U1', payload='https://', intent='check', expected='CAUTION'),
     dict(id='X1', payload='javascript:alert(1)', intent='check', expected='DANGER'),
     dict(id='S4', payload='upi://pay?pa=shop@okaxis&pn=Corner%20Store&mc=5411&am=250&cu=INR', intent='pay_shop', expected='SAFE'),
+    dict(id='T1', payload='https://onlinesbi.sbi.bank.in/?next=/a&next=/b', intent='check', expected='CAUTION'),
+    dict(id='T2', payload='https://example.test/?next=https%253A%252F%252Fdownload.test%252Fpayload.apk', intent='check', expected='DANGER'),
+    dict(id='T3', payload='upi://pay?pa=shop@ybl&pn=Shop&mc=ABCD', intent='pay_shop', expected='CAUTION'),
+    dict(id='T4', payload='upi://pay?pa=shop@ybl&pn=Shop&am=10&mam=20', intent='pay_shop', expected='CAUTION'),
+    dict(id='T5', payload='upi://pay?pa=shop@ybl&pn=Shop&pa=attacker@axl', intent='pay_shop', expected='CAUTION'),
+    dict(id='T6', payload='upi://pay?pa=shop@ybl&pn=Shop%E2%80%AE', intent='pay_shop', expected='CAUTION'),
 ])
 for i, entry in enumerate(cases):
     segno.make(entry['payload'], micro=False, error='m').save(directory / f"{entry['id']}.png", scale=[3, 5, 8][i % 3], border=4)

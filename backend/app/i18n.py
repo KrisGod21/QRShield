@@ -13,6 +13,46 @@ from __future__ import annotations
 LANGS = ("en", "hi", "mr")
 
 M: dict[str, dict[str, str]] = {
+    "UPI_DISPLAY_CONTROL": {
+        "en": "The payee name or note contains invisible text-direction controls that can change how it is displayed. Confirm the full beneficiary identity in your payment app.",
+        "hi": "नाम या नोट में अदृश्य अक्षर दिशा बदलते हैं। पेमेंट ऐप में प्राप्तकर्ता की पूरी पहचान जांचें।",
+        "mr": "नाव किंवा नोंदीतील अदृश्य अक्षरे मजकुराची दिशा बदलतात. पेमेंट ॲपमध्ये प्राप्तकर्त्याची पूर्ण ओळख तपासा.",
+    },
+    "URL_QUERY_CONFLICT": {
+        "en": "This link repeats query fields with conflicting values ({keys}). Different services may read different destinations or actions.",
+        "hi": "इस लिंक में अलग मान वाले दोहराए पैरामीटर हैं ({keys})। अलग सेवाएं अलग गंतव्य या क्रिया पढ़ सकती हैं।",
+        "mr": "या लिंकमध्ये वेगवेगळ्या मूल्यांचे पुनरावृत्त पॅरामीटर आहेत ({keys}). वेगवेगळ्या सेवा वेगळी कृती वाचू शकतात.",
+    },
+    "URL_EMBEDDED_DESTINATION": {
+        "en": "The '{key}' parameter contains another destination: {destination}. This is a declared target, not proof that a redirect occurred.",
+        "hi": "'{key}' में दूसरा गंतव्य है: {destination}। यह दिया गया पता है, वास्तविक रीडायरेक्ट का प्रमाण नहीं।",
+        "mr": "'{key}' मध्ये दुसरे गंतव्य आहे: {destination}. हा घोषित पत्ता आहे, प्रत्यक्ष रीडायरेक्टचा पुरावा नाही.",
+    },
+    "URL_HTTPS_DOWNGRADE": {
+        "en": "The redirect chain switches from encrypted HTTPS to unencrypted HTTP. Data sent to that destination could be intercepted.",
+        "hi": "रीडायरेक्ट HTTPS से बिना एन्क्रिप्शन HTTP पर जाता है। भेजा गया डेटा बीच में पढ़ा जा सकता है।",
+        "mr": "रीडायरेक्ट HTTPS वरून एन्क्रिप्शन नसलेल्या HTTP वर जातो. पाठवलेला डेटा मध्ये वाचला जाऊ शकतो.",
+    },
+    "URL_PARSER_AMBIGUITY": {
+        "en": "Control characters or backslashes make this address ambiguous across URL parsers. Opening is disabled; request a clean URL.",
+        "hi": "कंट्रोल अक्षर या बैकस्लैश से पता अलग-अलग पढ़ा जा सकता है। खोलना बंद है; साफ पता मांगें।",
+        "mr": "कंट्रोल अक्षरे किंवा बॅकस्लॅशमुळे पत्ता वेगवेगळा वाचला जाऊ शकतो. उघडणे बंद आहे; स्वच्छ पत्ता मागा.",
+    },
+    "UPI_MISSING_NAME": {
+        "en": "The payee display name is missing. Confirm the beneficiary name in your payment app before paying.",
+        "hi": "प्राप्तकर्ता का नाम नहीं है। भुगतान से पहले पेमेंट ऐप में नाम की पुष्टि करें।",
+        "mr": "प्राप्तकर्त्याचे नाव नाही. पेमेंट करण्यापूर्वी पेमेंट ॲपमध्ये नावाची खात्री करा.",
+    },
+    "UPI_BAD_MCC": {
+        "en": "The merchant category '{mcc}' is not a four-digit MCC. The declared merchant metadata is malformed.",
+        "hi": "व्यापारी श्रेणी '{mcc}' चार अंकों का MCC नहीं है। व्यापारी डेटा का प्रारूप गलत है।",
+        "mr": "व्यापारी श्रेणी '{mcc}' चार अंकी MCC नाही. व्यापारी डेटाचे स्वरूप चुकीचे आहे.",
+    },
+    "UPI_BAD_MIN_AMOUNT": {
+        "en": "The minimum amount is invalid or greater than the declared payment amount. Payment constraints are inconsistent.",
+        "hi": "न्यूनतम रकम गलत है या भुगतान रकम से अधिक है। भुगतान की शर्तें मेल नहीं खातीं।",
+        "mr": "किमान रक्कम चुकीची आहे किंवा पेमेंट रकमेपेक्षा जास्त आहे. पेमेंट अटी जुळत नाहीत.",
+    },
     "URL_INVALID": {
         "en": "This is not a valid website address. Do not open it; check the original QR or enter a complete URL.",
         "hi": "यह सही वेबसाइट पता नहीं है। इसे न खोलें; मूल QR या पूरा पता जांचें।",
@@ -490,9 +530,9 @@ M: dict[str, dict[str, str]] = {
     "HEAD_TEXT": {"en": "Plain text", "hi": "साधारण टेक्स्ट", "mr": "साधा मजकूर"},
     # ---------------------------------------------------------------- Shopkeeper mode
     "SHOP_MATCH": {
-        "en": "This is still YOUR QR ({vpa}). Safe for customers.",
-        "hi": "यह अभी भी आपका ही QR है ({vpa})। ग्राहकों के लिए सुरक्षित।",
-        "mr": "हा अजूनही तुमचाच QR आहे ({vpa}). ग्राहकांसाठी सुरक्षित.",
+        "en": "The payee address matches your saved QR ({vpa}). Review the other findings before accepting payments.",
+        "hi": "प्राप्तकर्ता का पता आपके सहेजे QR से मेल खाता है ({vpa})। भुगतान से पहले बाकी जांचें देखें।",
+        "mr": "प्राप्तकर्त्याचा पत्ता तुमच्या जतन केलेल्या QR शी जुळतो ({vpa}). पेमेंटपूर्वी इतर तपासण्या पहा.",
     },
     "SHOP_MISMATCH": {
         "en": "This is NOT your QR! Payments would go to {found} instead of your {expected}. Remove this sticker now and report it on 1930.",
@@ -505,9 +545,9 @@ M: dict[str, dict[str, str]] = {
         "mr": "प्राप्तकर्त्याचे नाव “{expected}” वरून “{found}” झाले आहे.",
     },
     "SHOP_NOT_UPI": {
-        "en": "This is not a UPI payment QR at all. Your shop QR has been replaced.",
-        "hi": "यह UPI भुगतान QR ही नहीं है। आपकी दुकान का QR बदल दिया गया है।",
-        "mr": "हा UPI पेमेंट QR च नाही. तुमच्या दुकानाचा QR बदलला गेला आहे.",
+        "en": "A valid UPI payment identity could not be read from this QR. Check the sticker against your saved original.",
+        "hi": "इस QR से सही UPI भुगतान पहचान नहीं पढ़ी जा सकी। सहेजे गए असली QR से तुलना करें।",
+        "mr": "या QR मधून वैध UPI पेमेंट ओळख वाचता आली नाही. जतन केलेल्या मूळ QR शी तुलना करा.",
     },
 }
 
