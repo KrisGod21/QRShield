@@ -9,6 +9,9 @@ def text(en: str, hi: str, mr: str) -> dict[str, str]:
 
 
 LABELS = {
+    "payload": text("Payload classification", "QR सामग्री का प्रकार", "QR सामग्रीचा प्रकार"),
+    "rules": text("Payload rule findings", "सामग्री के नियमों की जांच", "सामग्री नियमांचे निष्कर्ष"),
+    "limits": text("Verification scope", "पुष्टि का दायरा", "पडताळणीची व्याप्ती"),
     "domain": text("Domain boundary", "डोमेन सीमा", "डोमेन सीमा"),
     "identity": text("Lookalike / impersonation", "नकली पहचान की जांच", "बनावट ओळख तपासणी"),
     "transport": text("Transport encryption", "कनेक्शन एन्क्रिप्शन", "कनेक्शन एन्क्रिप्शन"),
@@ -40,3 +43,22 @@ def add(a: Analysis, code: str, status: str, value: str, detail: dict[str, str],
         scope: str = "") -> None:
     a.technical.append({"id": code, "label": LABELS[code], "status": status,
                         "value": value[:1200], "detail": detail, "scope": scope[:255]})
+
+
+def ensure_evidence(a: Analysis) -> None:
+    """Give all payload types evidence without exposing Wi-Fi / OTP secrets."""
+    if a.technical:
+        return
+    add(a, "payload", "info", a.kind.replace("_", " "), text(
+        "Classified from the decoded QR content. No action is executed automatically.",
+        "QR की सामग्री से प्रकार पहचाना गया। कोई क्रिया अपने आप नहीं चलती।",
+        "QR सामग्रीवरून प्रकार ओळखला. कोणतीही कृती आपोआप चालत नाही."))
+    warnings = sum(s.weight > 0 for s in a.signals)
+    add(a, "rules", "warn" if warnings else "info", f"{warnings} warning signals", text(
+        "The verdict uses the applicable payload rules. The reasons below explain each signal. No warning does not guarantee safety.",
+        "लागू सामग्री नियमों से नतीजा निकाला। नीचे हर संकेत का कारण है। चेतावनी न होना सुरक्षा की गारंटी नहीं।",
+        "लागू सामग्री नियमांवरून निकाल दिला. खाली प्रत्येक संकेताचे कारण आहे. इशारा नसणे सुरक्षिततेची हमी नाही."))
+    add(a, "limits", "unavailable", "Payload inspection only", text(
+        "This result does not authenticate a network, contact, account or device. Credentials and one-time secrets are excluded from this panel.",
+        "यह नेटवर्क, संपर्क, खाते या डिवाइस की असलियत की पुष्टि नहीं है। पासवर्ड और गोपनीय कोड यहां नहीं दिखाए जाते।",
+        "यातून नेटवर्क, संपर्क, खाते किंवा डिवाइसची सत्यता पडताळली नाही. पासवर्ड आणि गोपनीय कोड येथे दाखवले नाहीत."))

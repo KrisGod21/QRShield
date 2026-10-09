@@ -655,6 +655,8 @@ function ResultView({
         </div>
       )}
 
+      <TechnicalPanel lang={lang} findings={r.technical} />
+
       <h3>{t(lang, "why")}</h3>
       <ul className="reasons">
         {bad.length === 0 && (
@@ -692,8 +694,6 @@ function ResultView({
           ))}
         </div>
       )}
-
-      <TechnicalPanel lang={lang} findings={r.technical} />
 
       {Array.isArray(s.hops) && s.hops.length > 0 && (
         <details className="redirect-trace">

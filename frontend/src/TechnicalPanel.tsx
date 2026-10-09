@@ -28,6 +28,11 @@ const copy = {
   fail: ["Flagged", "चेतावनी", "धोक्याची नोंद"],
   info: ["Observed", "देखा गया", "निरीक्षण"],
   demo: ["Demo fixture", "Demo नमूना", "Demo नमुना"],
+  missing: [
+    "Detailed inspection is unavailable for this result. Scan again after refreshing the app.",
+    "इस परिणाम की विस्तृत जांच उपलब्ध नहीं है। ऐप रीफ्रेश करके फिर स्कैन करें।",
+    "या निकालाची सविस्तर तपासणी उपलब्ध नाही. ॲप रीफ्रेश करून पुन्हा स्कॅन करा.",
+  ],
 } as const;
 
 export function TechnicalPanel({
@@ -42,7 +47,6 @@ export function TechnicalPanel({
   );
   const index = lang === "hi" ? 1 : lang === "mr" ? 2 : 0;
   const label = (key: keyof typeof copy) => copy[key][index];
-  if (!findings.length) return null;
   const completed = findings.filter((f) =>
     ["pass", "warn", "fail", "info"].includes(f.status),
   ).length;
@@ -68,18 +72,21 @@ export function TechnicalPanel({
         </span>
       </div>
       <p className="technical-note">{label("note")}</p>
-      <div className="technical-filters" aria-label={label("title")}>
-        {(["all", "attention", "unavailable"] as const).map((key) => (
-          <button
-            key={key}
-            className={filter === key ? "on" : ""}
-            aria-pressed={filter === key}
-            onClick={() => setFilter(key)}
-          >
-            {label(key)}
-          </button>
-        ))}
-      </div>
+      {!findings.length && <p className="technical-note">{label("missing")}</p>}
+      {findings.length > 0 && (
+        <div className="technical-filters" aria-label={label("title")}>
+          {(["all", "attention", "unavailable"] as const).map((key) => (
+            <button
+              key={key}
+              className={filter === key ? "on" : ""}
+              aria-pressed={filter === key}
+              onClick={() => setFilter(key)}
+            >
+              {label(key)}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="technical-findings">
         {shown.map((finding, i) => (
           <details
@@ -111,7 +118,9 @@ export function TechnicalPanel({
             </div>
           </details>
         ))}
-        {!shown.length && <p className="technical-empty">{label("empty")}</p>}
+        {findings.length > 0 && !shown.length && (
+          <p className="technical-empty">{label("empty")}</p>
+        )}
       </div>
     </section>
   );

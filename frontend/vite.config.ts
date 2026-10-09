@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: false,
       includeAssets: ["icon.svg"],
       manifest: {
         name: "QR Shield",
@@ -18,7 +19,12 @@ export default defineConfig({
         start_url: "/",
         icons: [
           { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+          {
+            src: "icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any maskable",
+          },
         ],
       },
       workbox: {
@@ -28,5 +34,11 @@ export default defineConfig({
       },
     }),
   ],
-  server: { host: true, proxy: { "/api": "http://127.0.0.1:8000", "/demo": "http://127.0.0.1:8000" } },
+  server: {
+    host: true,
+    proxy: {
+      "/api": "http://127.0.0.1:8000",
+      "/demo": "http://127.0.0.1:8000",
+    },
+  },
 });

@@ -186,3 +186,18 @@ async def test_malformed_redirect_destination_does_not_crash_evidence(db, offlin
     r = await analyze("https://example.test/", "check", "text", db, replace(offline, online_checks=True))
     assert r["verdict"] != "SAFE"
     assert r["summary"]["invalid_url"] is True
+
+
+@pytest.mark.parametrize("payload,secret", [
+    ("WIFI:S:Home;T:WPA;P:private-password-789;;", "private-password-789"),
+    ("otpauth://totp/Example?secret=JBSWY3DPEHPK3PXP", "JBSWY3DPEHPK3PXP"),
+    ("tel:*401*9876543210#", ""),
+    ("https://", ""),
+])
+async def test_every_result_exposes_inspection_without_secrets(db, offline, payload, secret):
+    import json
+    r = await analyze(payload, "check", "text", db, offline)
+    assert r["technical"]
+    assert any(f["status"] == "unavailable" for f in r["technical"])
+    if secret:
+        assert secret not in json.dumps(r["technical"])

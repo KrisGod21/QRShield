@@ -16,6 +16,7 @@ from .config import Settings
 from .db import DB
 from .models import Analysis, Signal
 from .util import payload_hash, truncate
+from .technical import ensure_evidence
 
 SAFE_MAX = 24      # score <= 24 -> SAFE
 CAUTION_MAX = 59   # 25..59 -> CAUTION, >= 60 -> DANGER
@@ -149,6 +150,7 @@ async def analyze(payload: str, intent: str, source: str, db: DB, settings: Sett
         # Unverified report counts are advisory, never proof of maliciousness.
         a.add("COMMUNITY_REPORTED", 15, force="CAUTION", count=reports)
 
+    ensure_evidence(a)
     total, verdict = score(a.signals)
     ordered = sorted(a.signals, key=lambda s: (s.force != "DANGER", -s.weight if s.weight > 0 else 1000 - s.weight))
     return {

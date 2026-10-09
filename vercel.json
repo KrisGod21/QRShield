@@ -36,6 +36,14 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     },
     {
+      "source": "/",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
       "source": "/api/:path*",
       "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
